@@ -1,0 +1,10 @@
+name = "darray"
+version = "0.1.0"
+leanOptions = [["autoImplicit", false]]
+
+[[lean_lib]]
+name = "DArray"
+
+[[lean_exe]]
+name = "test"
+root = "Test"
