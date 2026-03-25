@@ -1,5 +1,5 @@
 import DArray
-import LargeStructure
+import DArray.Structure
 
 /-! # Heterogeneous Records using DArray + RArray
 

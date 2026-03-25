@@ -35,7 +35,7 @@ private partial def mkRArraySyntax (types : Array (Lean.TSyntax `term)) (lb ub :
     `(Lean.RArray.branch $midLit $left $right)
 
 declare_syntax_cat lsField
-syntax ident " : " term:max : lsField
+syntax (name := lsFieldRule) ident " : " term:max : lsField
 
 syntax "large_structure " ident " where" (ppLine colGe lsField)* : command
 
@@ -113,24 +113,3 @@ macro_rules
     let allCmds : Array (Lean.TSyntax `command) :=
       #[typesCmd, motiveCmd, mainCmd, nsOpen] ++ accessorCmds ++ #[mkCmd, nsClose]
     return Lean.mkNullNode (allCmds.map (·.raw))
-
-/-! ## Inline test -/
-
-large_structure TestPerson where
-  name : String
-  age : Nat
-  active : Bool
-
-/-- Verify the generated structure works at runtime. -/
-def testLargeStructure : IO Unit := do
-  let p := TestPerson.mk "Alice" 30 true
-  assert! p.name == "Alice"
-  assert! p.age == 30
-  assert! p.active == true
-  let p2 := p.setName "Bob" |>.modifyAge (· + 1) |>.setActive false
-  assert! p2.name == "Bob"
-  assert! p2.age == 31
-  assert! p2.active == false
-  IO.println "LargeStructure inline tests passed"
-
-#eval testLargeStructure

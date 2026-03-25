@@ -1,4 +1,5 @@
 import DArray
+import DArray.Structure
 
 set_option maxRecDepth 1024
 
@@ -7,6 +8,21 @@ abbrev constNat := fun (_ : Nat) => Nat
 def check (name : String) (actual expected : Nat) : IO Unit := do
   if actual != expected then
     throw <| IO.userError s!"{name}: expected {expected}, got {actual}"
+
+large_structure TestPerson where
+  name : String
+  age : Nat
+  active : Bool
+
+def testLargeStructure : IO Unit := do
+  let p := TestPerson.mk "Alice" 30 true
+  assert! p.name == "Alice"
+  assert! p.age == 30
+  assert! p.active == true
+  let p2 := p.setName "Bob" |>.modifyAge (· + 1) |>.setActive false
+  assert! p2.name == "Bob"
+  assert! p2.age == 31
+  assert! p2.active == false
 
 def main : IO Unit := do
   IO.println "=== push/get ==="
@@ -131,5 +147,9 @@ def main : IO Unit := do
   let bigSum := big.foldl (fun _ acc x => acc + x) 0
   check "bigSum" bigSum 4999950000
   IO.println s!"  size={big.size} sum={bigSum}"
+
+  IO.println "=== large_structure ==="
+  testLargeStructure
+  IO.println "  ok"
 
   IO.println "all tests passed!"
