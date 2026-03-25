@@ -8,6 +8,9 @@ name = "DArray"
 name = "test"
 root = "Test"
 
+[[lean_lib]]
+name = "LargeStructure"
+
 [[lean_exe]]
 name = "hetrecord"
 root = "HetRecord"

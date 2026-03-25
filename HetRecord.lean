@@ -1,4 +1,5 @@
 import DArray
+import LargeStructure
 
 /-! # Heterogeneous Records using DArray + RArray
 
@@ -59,6 +60,13 @@ def mk (name : String) (age : Nat) (active : Bool) : Person :=
   (DArray.mkEmpty 3).push name |>.push age |>.push active
 
 end Person
+
+/-! ## Macro-generated version for comparison -/
+
+large_structure Person' where
+  name : String
+  age : Nat
+  active : Bool
 
 /-! ## Scaled-up Example: 1000 fields (all Nat)
 
@@ -129,6 +137,21 @@ def main : IO Unit := do
   assert! p2.age == 31
   assert! p2.active == false
   IO.println "  Person tests passed"
+
+  IO.println "=== Person' (macro-generated) ==="
+  let p' := Person'.mk "Charlie" 25 true
+  IO.println s!"  name: {p'.name}"
+  IO.println s!"  age: {p'.age}"
+  IO.println s!"  active: {p'.active}"
+
+  let p2' := p'.setName "Diana" |>.modifyAge (· + 5) |>.setActive false
+  assert! p'.name == "Charlie"
+  assert! p'.age == 25
+  assert! p'.active == true
+  assert! p2'.name == "Diana"
+  assert! p2'.age == 30
+  assert! p2'.active == false
+  IO.println "  Person' tests passed"
 
   IO.println "=== BigRecord (1000 fields) ==="
   let big := BigRecord.mk (fun i => i.val)
