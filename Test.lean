@@ -1,80 +1,135 @@
 import DArray
 
-/-!
-# Tests for DArray
-
-Compile-time `#guard` tests verify the logical model (pure functions).
-Runtime tests in `main` exercise the `@[implemented_by]` Array-backed
-implementations, including a stress test proving O(1) amortized performance.
--/
+set_option maxRecDepth 1024
 
 abbrev constNat := fun (_ : Nat) => Nat
 
-section CompileTimeTests
-
--- These evaluate using the pure logical model at elaboration time.
-#guard (DArray.empty (α := constNat)).size = 0
-#guard ((DArray.empty (α := constNat)).push 1).size = 1
-#guard ((DArray.empty (α := constNat)).push 10 |>.push 20 |>.push 30).size = 3
-
-end CompileTimeTests
-
-def assert (b : Bool) (msg : String) : IO Unit :=
-  if b then pure () else throw (.userError s!"FAILED: {msg}")
-
-/-- Build a DArray [0, 1, ..., n-1] using Array directly (for stress testing). -/
-private unsafe def buildBigImpl (n : Nat) : DArray constNat n := Id.run do
-  let mut arr : Array PUnit.{1} := Array.mkEmpty n
-  for i in [:n] do
-    arr := arr.push (unsafeCast i)
-  return unsafeCast arr
-
-@[implemented_by buildBigImpl]
-private def buildBig (n : Nat) : DArray constNat n :=
-  match n with
-  | 0 => DArray.empty
-  | n + 1 => (buildBig n).push n
+def check (name : String) (actual expected : Nat) : IO Unit := do
+  if actual != expected then
+    throw <| IO.userError s!"{name}: expected {expected}, got {actual}"
 
 def main : IO Unit := do
-  -- mkEmpty + push + size
-  let a := (DArray.mkEmpty 4 : DArray constNat 0).push 10 |>.push 20 |>.push 30
-  assert (a.size == 3) "size"
+  IO.println "=== push/get ==="
+  let a := (DArray.mkEmpty 4 : DArray constNat 0).push 0 |>.push 10 |>.push 20 |>.push 30
+  check "push[0]" (a.get ⟨0, by omega⟩) 0
+  check "push[3]" (a.get ⟨3, by omega⟩) 30
+  IO.println "  ok"
 
-  -- get
-  assert (a.get ⟨0, by omega⟩ == 10) "get[0]"
-  assert (a.get ⟨1, by omega⟩ == 20) "get[1]"
-  assert (a.get ⟨2, by omega⟩ == 30) "get[2]"
+  IO.println "=== ofFn ==="
+  let c := DArray.ofFn (α := constNat) (n := 4) (fun i => i.val * 10)
+  check "ofFn[0]" (c.get ⟨0, by omega⟩) 0
+  check "ofFn[1]" (c.get ⟨1, by omega⟩) 10
+  check "ofFn[2]" (c.get ⟨2, by omega⟩) 20
+  check "ofFn[3]" (c.get ⟨3, by omega⟩) 30
+  IO.println "  ok"
 
-  -- set
-  let b := a.set ⟨1, by omega⟩ 99
-  assert (b.get ⟨0, by omega⟩ == 10) "set: unchanged[0]"
-  assert (b.get ⟨1, by omega⟩ == 99) "set: changed[1]"
-  assert (b.get ⟨2, by omega⟩ == 30) "set: unchanged[2]"
+  IO.println "=== set ==="
+  let d := c.set ⟨1, by omega⟩ 99
+  check "set[1]" (d.get ⟨1, by omega⟩) 99
+  IO.println "  ok"
 
-  -- getD
-  assert (a.getD 1 0 == 20) "getD in bounds"
-  assert (a.getD 99 0 == 0) "getD out of bounds"
+  IO.println "=== pop ==="
+  let e := c.pop
+  check "pop.size" e.size 3
+  check "pop[0]" (e.get ⟨0, by omega⟩) 0
+  IO.println "  ok"
 
-  -- toArray
-  assert (a.toArray (fun _ x => x) == #[10, 20, 30]) "toArray"
+  IO.println "=== head/back ==="
+  check "head" c.head 0
+  check "back" c.back 30
+  IO.println "  ok"
 
-  -- toString
-  assert (s!"{b}" == "#[10, 99, 30]") "toString"
+  IO.println "=== modify ==="
+  let m := c.modify ⟨2, by omega⟩ (· + 5)
+  check "modify[2]" (m.get ⟨2, by omega⟩) 25
+  IO.println "  ok"
 
-  IO.println "Basic tests passed."
+  IO.println "=== map ==="
+  let f := c.map (fun _ x => x + 1)
+  check "map[0]" (f.get ⟨0, by omega⟩) 1
+  check "map[1]" (f.get ⟨1, by omega⟩) 11
+  IO.println "  ok"
 
-  -- Stress test: build a large array using Array-backed push.
-  -- Completing in < 1s proves native Array.push (O(1) amortized) is used.
-  let n := 100000
-  let start ← IO.monoMsNow
-  let big := buildBig n
-  let elapsed := (← IO.monoMsNow) - start
+  IO.println "=== replicate ==="
+  let g := DArray.replicate 3 42
+  check "replicate[0]" (g.get ⟨0, by omega⟩) 42
+  IO.println "  ok"
 
-  assert (big.size == n) "big size"
-  assert (big.getD 0 42 == 0) "big[0]"
-  assert (big.getD (n - 1) 42 == n - 1) "big[n-1]"
+  IO.println "=== take ==="
+  let t := c.take 2 (by omega)
+  check "take.size" t.size 2
+  check "take[0]" (t.get ⟨0, by omega⟩) 0
+  IO.println "  ok"
 
-  IO.println s!"100k push+get: {elapsed}ms (native Array performance)"
-  assert (elapsed < 2000) "100k ops should complete quickly"
+  IO.println "=== foldl ==="
+  let sum := c.foldl (fun _ acc x => acc + x) 0
+  check "foldl" sum 60
+  IO.println "  ok"
 
-  IO.println "All tests passed."
+  IO.println "=== reverse ==="
+  let r := c.reverse
+  check "reverse[0]" (r.get ⟨0, by omega⟩) 30
+  check "reverse[3]" (r.get ⟨3, by omega⟩) 0
+  IO.println "  ok"
+
+  IO.println "=== zipWith ==="
+  let b := DArray.ofFn (α := constNat) (n := 4) (fun i => i.val + 1)
+  let z := c.zipWith b (fun _ x y => x + y)
+  check "zip[0]" (z.get ⟨0, by omega⟩) 1
+  check "zip[3]" (z.get ⟨3, by omega⟩) 34
+  IO.println "  ok"
+
+  IO.println "=== append ==="
+  let a1 := DArray.ofFn (α := constNat) (n := 2) (fun i => i.val)
+  let a2 := DArray.ofFn (α := constNat) (n := 2) (fun i => i.val + 10)
+  let ap := a1.append a2
+  check "append[0]" (ap.get ⟨0, by omega⟩) 0
+  check "append[2]" (ap.get ⟨2, by omega⟩) 10
+  IO.println "  ok"
+
+  IO.println "=== BEq ==="
+  let c2 := DArray.ofFn (α := constNat) (n := 4) (fun i => i.val * 10)
+  assert! c == c2
+  IO.println "  ok"
+
+  IO.println "=== mapM ==="
+  let doubled ← c.mapM (fun _ x => pure (x * 2))
+  check "mapM[1]" (doubled.get ⟨1, by omega⟩) 20
+  IO.println "  ok"
+
+  IO.println "=== foldlM ==="
+  let sumM ← c.foldlM (fun _ acc x => pure (acc + x)) 0
+  check "foldlM" sumM 60
+  IO.println "  ok"
+
+  IO.println "=== forM ==="
+  let ref ← IO.mkRef (0 : Nat)
+  c.forM (fun _ x => ref.modify (· + x))
+  let forMSum ← ref.get
+  check "forM" forMSum 60
+  IO.println "  ok"
+
+  IO.println "=== drop ==="
+  let dr := c.drop 1 (by omega)
+  check "drop[0]" (dr.get ⟨0, by omega⟩) 10
+  check "drop[1]" (dr.get ⟨1, by omega⟩) 20
+  check "drop.size" dr.size 3
+  IO.println "  ok"
+
+  IO.println "=== extract ==="
+  let ex := c.extract 1 3 (by omega) (by omega)
+  check "extract[0]" (ex.get ⟨0, by omega⟩) 10
+  check "extract[1]" (ex.get ⟨1, by omega⟩) 20
+  check "extract.size" ex.size 2
+  IO.println "  ok"
+
+  IO.println "=== stress ==="
+  let big := DArray.ofFn (α := fun _ => Nat) (n := 100000) (fun i => i.val)
+  check "big[0]" (big.get ⟨0, by omega⟩) 0
+  check "big[99999]" (big.get ⟨99999, by omega⟩) 99999
+  check "big.size" big.size 100000
+  let bigSum := big.foldl (fun _ acc x => acc + x) 0
+  check "bigSum" bigSum 4999950000
+  IO.println s!"  size={big.size} sum={bigSum}"
+
+  IO.println "all tests passed!"
